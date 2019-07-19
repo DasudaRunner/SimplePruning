@@ -19,24 +19,27 @@ This repository provides a cnn channels pruning demo with tensorflow.
 ---
 ## Getting Started
 
-- Clone the repository.
+- ##### Clone the repository
 ```bash
   $ git clone https://github.com/DasudaRunner/SimplePruning.git
 ```
 
-- Downdload the Cifar10 dataset, and put into cifar-10-python/.
-  url: `http://www.cs.toronto.edu/~kriz/cifar.html`
+- ##### Downdload the Cifar10 dataset, and put into cifar-10-python/.
+  Url: `http://www.cs.toronto.edu/~kriz/cifar.html`
 
-- Define your model in modesets.py.(**optional**)
+- ##### Define your model in modesets.py.(**optional**)
 
-- Config params in utils/config.py.(**optional**)
+  `You must use add_layer() API defined in pruner.py to set up your model. More details to modelsets.py`
 
-- Train a full model, .ckpt and .pb model file will be saved in ckpt_model/.
+- ##### Config params in utils/config.py.(**optional**)
+  `e.g. model name, learning rate, pruning rate.`
+
+- ##### Train a full model, .ckpt and .pb model file will be saved in ckpt_model/.
 ```bash
   $ python full_train.py
 ```
 
-- Channel pruning. .ckpt and .pb model file will be saved in channels_pruned_model/.
+- ##### Channel pruning. .ckpt and .pb model file will be saved in channels_pruned_model/.
 ```bash
   $ python channels_pruning.py
 ```
