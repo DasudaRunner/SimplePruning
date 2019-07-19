@@ -1,5 +1,5 @@
 # SimplePruning
-This repository provides a cnn channels pruning demo with tensorflow.
+This repository provides a cnn channels pruning demo with tensorflow. You can pruning your own model(support conv2d,depthwise conv2d,pool,fc,concat ops...) defined in modelsets.py. Have a good time!
 
 &nbsp;[![author Haibo](https://img.shields.io/badge/author-Haibo%20Wong-blue.svg?style=flat)](https://github.com/DasudaRunner/Object-Tracking)&nbsp;&nbsp;&nbsp;&nbsp;
 [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/dwyl/esta/issues)<br>
@@ -10,11 +10,11 @@ This repository provides a cnn channels pruning demo with tensorflow.
 ---
 ## Dependencies
 
-- Tensorflow >= 1.10.0
-- python >= 3.5
-- opencv-python >= 4.1.0
-- numpy >= 1.14.5
-- matplotlib >= 3.0.3
+- `Tensorflow >= 1.10.0`
+- `python >= 3.5`
+- `opencv-python >= 4.1.0`
+- `numpy >= 1.14.5`
+- `matplotlib >= 3.0.3`
 
 ---
 ## Getting Started
