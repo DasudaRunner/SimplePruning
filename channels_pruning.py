@@ -1,4 +1,15 @@
 #coding:utf-8
+
+'''
+author:Wang Haibo
+at: Pingan Tec.
+email: haibo.david@qq.com
+
+!!!
+代码中会有少量中文注释，无需在意
+
+'''
+
 import numpy as np
 import os
 import tensorflow as tf
@@ -98,7 +109,7 @@ if __name__ == "__main__":
         if not full_train:
             model.restore_w(sess,"./weights_data/weights_"+str(prune_rate)+".pkl")
         else:
-            pritn("fullly train the pruned model.")
+            print("fullly train the pruned model.")
 
         # test before pruning
         all_test_acc_val = []
@@ -121,11 +132,13 @@ if __name__ == "__main__":
         for epoch in range(retrain_epoches):
             for i in range(train_batches):
                 batch_data, batch_labels = train_data.next_batch(train_batch_size)
+                start_time = time.time()
                 sess.run(train_step,feed_dict={input_x: batch_data, input_y: batch_labels,is_train:True})
-
+                step_time = time.time()-start_time
                 if (i + 1) % cfg.PRINT_TRAIN_INFO_PER_STEP == 0:
                     loss_val,acc_val = sess.run([loss,accuracy],feed_dict={input_x: batch_data, input_y: batch_labels,is_train:False})
-                    print('[Retrain] Epoches: %d, Step: %d, loss: %4.5f, acc: %4.5f' % (epoch+1,i + 1, loss_val, acc_val))
+                    print('[Retrain] Epoch: %d, Step: %d, loss: %4.5f, acc: %4.5f, time:%4.3fms/sample'
+                          % (epoch+1,i + 1, loss_val, acc_val, (step_time*1000.)/(cfg.PRINT_TRAIN_INFO_PER_STEP*cfg.TRAIN_BATCHSIZE)))
 
                     drawer.drawPts(acc_val,0)
                     drawer.drawPts(loss_val,1,5.0)

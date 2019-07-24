@@ -1,12 +1,17 @@
 #coding:utf-8
-#author:Wang Haibo
-#at: Pingan Tec.
 
+'''
+author:Wang Haibo
+at: Pingan Tec.
+email: haibo.david@qq.com
+
+!!!
+代码中会有少量中文注释，无需在意
+
+'''
 import cv2
 import pickle as pkl
 import numpy as np
-import os
-import tensorflow as tf
 import random
 
 def load_data(filename):

@@ -1,5 +1,5 @@
 # SimplePruning
-This repository provides a cnn channels pruning demo with tensorflow. You can pruning your own model(support conv2d,depthwise conv2d,pool,fc,concat ops...) defined in modelsets.py. Have a good time!
+This repository provides a cnn channels pruning demo with tensorflow. You can pruning your own model(support conv2d,depthwise conv2d,pool,fc,concat, add ops and so on) defined in modelsets.py. Have a good time!
 
 &nbsp;[![author Haibo](https://img.shields.io/badge/author-Haibo%20Wong-blue.svg?style=flat)](https://github.com/DasudaRunner/Object-Tracking)&nbsp;&nbsp;&nbsp;&nbsp;
 [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/dwyl/esta/issues)<br>
@@ -45,6 +45,20 @@ This repository provides a cnn channels pruning demo with tensorflow. You can pr
 ```
 
 ---
+## Supported ops (Tensorflow)
+
+- Conv2d
+- FullyConnected
+- MaxPooling, AveragePooling
+- BatchNormalization
+- Activation
+- DepthwiseConv2d
+- GlobalMaxPooling, GlobalAveragePooling
+- Concat
+- Add
+- Flatten
+
+---
 ## Evaluation on Cifar10 dataset
 
 | Model | Dataset | Pruning rate | Model size / MB | Inference time / ms\*64pic |
@@ -54,3 +68,15 @@ This repository provides a cnn channels pruning demo with tensorflow. You can pr
 |DenseNet40|cifar-10| 0.5 |4.3 -> 1.5|77.87 -> 39.97|
 |MobileNet V1|cifar-10| 0.5 |6.6 -> 1.8|19.39 -> 8.01|
 |OCR-Net|---|0.5|2426.2 -> 841.9|10.36->7.3|
+
+---
+## Update logs
+
+- 2019.07.24
+	- Add support for `Add` op.
+	- Add support for ResNet18/ResNet34 in modelsets.py.
+- 2019.07.16
+	- Add support for `Concat` op.
+	- Add support for DenseNet40  in modelsets.py.
+- 2019.07.14
+	- Reconsitution SimplePruning.

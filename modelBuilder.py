@@ -1,4 +1,15 @@
 #coding:utf-8
+
+'''
+author:Wang Haibo
+at: Pingan Tec.
+email: haibo.david@qq.com
+
+!!!
+代码中会有少量中文注释，无需在意
+
+'''
+
 import os
 import time
 import numpy as np

@@ -4,6 +4,10 @@
 author:Wang Haibo
 at: Pingan Tec.
 email: haibo.david@qq.com
+
+!!!
+代码中会有少量中文注释，无需在意
+
 '''
 
 import numpy as np
@@ -20,17 +24,18 @@ class Pruner():
         self.__weights={}
         self.__pruning_mask={} # weights prune
         self.__chanels_mask={} # channels prune
+        self.__add_shape={} # special for add op
 
         self.__layer_cnt=0
 
         self.__support_ops=["conv","fc","dconv"]
-        self.__support_merge_ops = ["concat"]
+        self.__support_special_ops = ["add"]
 
         self.__support_prune_weights_type = ["rate","threshold"]
         self.__support_prune_channels_type = ["rate","auto"]
 
-        self.__layer_remap = {} # 记录每一层的mask 通道剪枝中的
-        self.__index_remap = []
+        self.__layer_remap = {} # 记录网络的拓扑结构
+        self.__index_remap = [] # __layer_remap中为self.__support_ops的layer
 
         self.__shapes_data = None
         if reload_file is not None:
@@ -118,7 +123,7 @@ class Pruner():
 
             temp_op = tf.nn.bias_add(tf.matmul(inputs,temp_w),temp_b,name="fc_" + str(self.__layer_cnt))
 
-            self.__insert_remap(temp_op.name[:-2],inputs.name[:-2])
+            self.__insert_remap(temp_op.name[:-2], [inputs.name[:-2]])
 
         elif mode=="conv":
 
@@ -137,7 +142,7 @@ class Pruner():
             temp_op = tf.nn.bias_add(tf.nn.conv2d(inputs, filter=temp_w, strides=[1,strides,strides,1], padding=padding),
                                      temp_b, name="conv_" + str(self.__layer_cnt))
 
-            self.__insert_remap(temp_op.name[:-2], inputs.name[:-2])
+            self.__insert_remap(temp_op.name[:-2], [inputs.name[:-2]])
 
         elif mode=="dconv":
 
@@ -167,16 +172,16 @@ class Pruner():
             temp_op = tf.nn.bias_add(tf.nn.conv2d(temp_op_1,filter=temp_w,strides=[1,1,1,1],padding="SAME"),
                                      temp_b,name="dconv_"+str(self.__layer_cnt))
 
-            self.__insert_remap(temp_op.name[:-2], inputs.name[:-2])
+            self.__insert_remap(temp_op.name[:-2], [inputs.name[:-2]])
 
         if with_bn:
             out1 = tf.layers.batch_normalization(temp_op,training=is_train)
             out = act(out1, name="relu_" + str(self.__layer_cnt))
-            self.__insert_remap(out.name[:-2], temp_op.name[:-2])
+            self.__insert_remap(out.name[:-2], [temp_op.name[:-2]])
         else:
             if act is not None:
                 out = act(temp_op,name="relu_"+str(self.__layer_cnt))
-                self.__insert_remap(out.name[:-2],temp_op.name[:-2])
+                self.__insert_remap(out.name[:-2], [temp_op.name[:-2]])
             else:
                 out = temp_op
 
@@ -195,7 +200,7 @@ class Pruner():
     def bn_act_layer(self,inputs,is_train,act=tf.nn.relu):
         out = tf.layers.batch_normalization(inputs, training=is_train)
         out = act(out, name="relu_" + str(self.__layer_cnt))
-        self.__insert_remap(out.name[:-2], inputs.name[:-2])
+        self.__insert_remap(out.name[:-2], [inputs.name[:-2]])
         self.__next_iteration()
         return out
 
@@ -211,13 +216,14 @@ class Pruner():
 
         temp_op = pool_func(inputs,ksize=[1,pool_size,pool_size,1],strides=[1,strides,strides,1],
                                  padding=padding,name=op_name)
-        self.__insert_remap(op_name,inputs.name[:-2])
+        self.__insert_remap(op_name, [inputs.name[:-2]])
         self.__next_iteration()
         return temp_op
 
     def flatten_layer(self,inputs):
         temp_op = tf.reshape(inputs,[-1,int(inputs.get_shape().as_list()[-1])],name="flat_"+str(self.__layer_cnt))
-        self.__insert_remap("flat_" + str(self.__layer_cnt), inputs.name[:-2])
+        self.__insert_remap("flat_" + str(self.__layer_cnt), [inputs.name[:-2]])
+        self.__next_iteration()
         return temp_op
 
     def gmp_layer(self,inputs):
@@ -225,7 +231,7 @@ class Pruner():
         temp_op = tf.nn.max_pool(inputs,ksize=[1,pool_size,pool_size,1],strides=[1,1,1,1],
                                  padding="VALID")
         out = tf.reshape(temp_op, [-1, int(temp_op.get_shape().as_list()[-1])], name="gam_" + str(self.__layer_cnt))
-        self.__insert_remap("gam_" + str(self.__layer_cnt), inputs.name[:-2])
+        self.__insert_remap("gam_" + str(self.__layer_cnt), [inputs.name[:-2]])
         self.__next_iteration()
         return out
 
@@ -234,7 +240,7 @@ class Pruner():
         temp_op = tf.nn.avg_pool(inputs,ksize=[1,pool_size,pool_size,1],strides=[1,1,1,1],
                                  padding="VALID")
         out = tf.reshape(temp_op, [-1, int(temp_op.get_shape().as_list()[-1])],name="gap_"+str(self.__layer_cnt))
-        self.__insert_remap("gap_" + str(self.__layer_cnt), inputs.name[:-2])
+        self.__insert_remap("gap_" + str(self.__layer_cnt), [inputs.name[:-2]])
         self.__next_iteration()
         return out
 
@@ -252,6 +258,7 @@ class Pruner():
 
         temp_op = tf.add(a,b,name="add_"+str(self.__layer_cnt))
 
+        self.__add_shape.update({temp_op.name[:-2]:a.get_shape().as_list()[-1]})
         self.__insert_remap(temp_op.name[:-2], [a.name[:-2],b.name[:-2]])
         self.__next_iteration()
         return temp_op
@@ -286,7 +293,7 @@ class Pruner():
         while True:
             temp_f = self.__layer_remap[son_name]
 
-            if isinstance(temp_f,list):
+            if len(temp_f)>1:
                 remain_ops = temp_f.copy()
                 goon = True
                 while goon:
@@ -294,27 +301,50 @@ class Pruner():
                     temp_ops = []
                     for i in remain_ops:
                         op_details = i.split("_")
-                        if op_details[0] in self.__support_ops:
+                        if op_details[0] in (self.__support_ops+self.__support_special_ops):
                             temp_ops.append(i)
                         else:
                             goon = True
-                            if isinstance(self.__layer_remap[i],list):
-                                temp_ops+=self.__layer_remap[i]
-                            else:
-                                temp_ops.append(self.__layer_remap[i])
+                            temp_ops+=self.__layer_remap[i]
                     remain_ops = temp_ops.copy()
 
                 real_father = remain_ops.copy()
                 break
             else:
-                op_details = temp_f.split("_")
-                if op_details[0] in self.__support_ops:
-                    real_father.append(temp_f)
+                op_details = temp_f[0].split("_")
+                if op_details[0] in (self.__support_ops+self.__support_special_ops):
+                    real_father+=temp_f
                     break
                 else:
-                    son_name = temp_f
+                    son_name = temp_f[0]
 
         return real_father
+
+    def __get_son(self,father_name):
+        son_name = []
+
+        _left_son_name = [father_name]
+        whole_support_ops = self.__support_ops+self.__support_special_ops
+        go_on = True
+        while go_on:
+            go_on = False
+            _temp_left_son = []
+            for s_son in _left_son_name:
+                # find son nodes
+                for i in self.__layer_remap.keys():
+                    if self.__layer_remap[i] is None:
+                        continue
+                    if s_son in self.__layer_remap[i]:
+                        if self.__get_op_type(i) not in whole_support_ops:
+                            go_on = True
+                            _temp_left_son.append(i)
+                        else:
+                            if i not in son_name:
+                                son_name.append(i)
+
+            _left_son_name = _temp_left_son.copy()
+
+        return son_name
 
     def __get_op_type(self,full_name):
         temp = full_name.split("_")
@@ -342,18 +372,26 @@ class Pruner():
             if len(self.__chanels_mask)>0: #pre prune
                 father_name = self.__get_father(self.__index_remap[sl])
                 if len(father_name)==1:
-                    temp_mask = self.__chanels_mask[father_name[0]]
-                    np_weight = np_weight[:, :, temp_mask, :]
-                else:
+                    if not self.__get_op_type(father_name[0])=="add": #当father是add时，不进行pre pruning
+                        temp_mask = self.__chanels_mask[father_name[0]]
+                        np_weight = np_weight[:, :, temp_mask, :]
+                else: # must be concat
                     cnt = 0
                     real_mask = []
                     for i in father_name:
                         temp_index = self.__get_op_index(i)
-                        if self.__get_op_type(i)=="dconv":
-                            total_len = self.__weights["w_" + temp_index+"_pts"].get_shape().as_list()[-1]
+                        if self.__get_op_type(i)=="add":
+                            total_len = self.__add_shape["add_"+temp_index]
+
+                            single_mask = [i for i in range(total_len)] # 全部保留
                         else:
-                            total_len = self.__weights["w_" + temp_index].get_shape().as_list()[-1]
-                        single_mask = self.__chanels_mask[i]
+                            if self.__get_op_type(i)=="dconv":
+                                total_len = self.__weights["w_" + temp_index+"_pts"].get_shape().as_list()[-1]
+                            else:
+                                total_len = self.__weights["w_" + temp_index].get_shape().as_list()[-1]
+
+                            single_mask = self.__chanels_mask[i]
+
                         _single_mask = np.array(single_mask) + cnt
                         real_mask += list(_single_mask)
 
@@ -361,6 +399,23 @@ class Pruner():
 
                     real_mask = np.array(real_mask)
                     np_weight = np_weight[:, :, real_mask, :]
+
+            son_list = self.__get_son(self.__index_remap[sl])
+
+            # if currnet node is the last node
+            if len(son_list)==0:
+                return_weights_dict = {"w_" + op_index: np_weight,
+                                       "b_" + op_index: np_bias}
+                return return_weights_dict, np_weight.shape
+
+            for s_n in son_list:
+                if self.__get_op_type(s_n)=="add":
+                    return_weights_dict = {"w_" + op_index: np_weight,
+                                           "b_" + op_index: np_bias}
+                    prune_channel_index = [i for i in range(np_weight.shape[-1])]
+                    self.__chanels_mask.update(
+                        {self.__index_remap[sl]: prune_channel_index})  # save the channels mask
+                    return return_weights_dict,np_weight.shape
 
             conv_sum = np.sum(np_weight,(0,1,2))
             abs_conv_sum = np.abs(conv_sum)
@@ -389,19 +444,27 @@ class Pruner():
             if len(self.__chanels_mask)>0: #pre prune
                 father_name = self.__get_father(self.__index_remap[sl])
                 if len(father_name)==1:
-                    temp_mask = self.__chanels_mask[father_name[0]]
-                    np_weight = np_weight[temp_mask,:]
+                    if not self.__get_op_type(father_name[0]) == "add":  # 当father是add时，不进行pre pruning
+                        temp_mask = self.__chanels_mask[father_name[0]]
+                        np_weight = np_weight[temp_mask,:]
                 else:
                     cnt = 0
                     real_mask = []
                     for i in father_name:
                         temp_index = self.__get_op_index(i)
-                        if self.__get_op_type(i)=="dconv":
-                            total_len = self.__weights["w_" + temp_index+"_pts"].get_shape().as_list()[-1]
-                        else:
-                            total_len = self.__weights["w_" + temp_index].get_shape().as_list()[-1]
 
-                        single_mask = self.__chanels_mask[i]
+                        if self.__get_op_type(i)=="add":
+                            total_len = self.__add_shape["add_"+temp_index]
+
+                            single_mask = [i for i in range(total_len)] # 全部保留
+                        else:
+                            if self.__get_op_type(i)=="dconv":
+                                total_len = self.__weights["w_" + temp_index+"_pts"].get_shape().as_list()[-1]
+                            else:
+                                total_len = self.__weights["w_" + temp_index].get_shape().as_list()[-1]
+
+                            single_mask = self.__chanels_mask[i]
+
                         _single_mask = np.array(single_mask) + cnt
                         real_mask += list(_single_mask)
 
@@ -410,9 +473,22 @@ class Pruner():
                     real_mask = np.array(real_mask)
                     np_weight = np_weight[real_mask, :]
 
-            if sl==self.__total_w_count-1:
-                return_weights_dict = {"w_" + op_index: np_weight, "b_" + op_index: np_bias}
-                return return_weights_dict,np_weight.shape
+            son_list = self.__get_son(self.__index_remap[sl])
+
+            # if currnet node is the last node
+            if len(son_list)==0:
+                return_weights_dict = {"w_" + op_index: np_weight,
+                                       "b_" + op_index: np_bias}
+                return return_weights_dict, np_weight.shape
+
+            for s_n in son_list:
+                if self.__get_op_type(s_n)=="add":
+                    return_weights_dict = {"w_" + op_index: np_weight,
+                                           "b_" + op_index: np_bias}
+                    prune_channel_index = [i for i in range(np_weight.shape[-1])]
+                    self.__chanels_mask.update(
+                        {self.__index_remap[sl]: prune_channel_index})  # save the channels mask
+                    return return_weights_dict,np_weight.shape
 
             conv_sum = np.sum(np_weight, (0,))
             abs_conv_sum = np.abs(conv_sum)
@@ -442,20 +518,28 @@ class Pruner():
             if len(self.__chanels_mask)>0: #pre prune
                 father_name = self.__get_father(self.__index_remap[sl])
                 if len(father_name)==1:
-                    temp_mask = self.__chanels_mask[father_name[0]]
-                    np_weight_dep = np_weight_dep[:, :, temp_mask, :]
-                    np_weight_pts = np_weight_pts[:, :, temp_mask, :]
+                    if not self.__get_op_type(father_name[0]) == "add":  # 当father是add时，不进行pre pruning
+                        temp_mask = self.__chanels_mask[father_name[0]]
+                        np_weight_dep = np_weight_dep[:, :, temp_mask, :]
+                        np_weight_pts = np_weight_pts[:, :, temp_mask, :]
                 else:
                     cnt = 0
                     real_mask = []
                     for i in father_name:
                         temp_index = self.__get_op_index(i)
-                        if self.__get_op_type(i)=="dconv":
-                            total_len = self.__weights["w_" + temp_index+"_pts"].get_shape().as_list()[-1]
-                        else:
-                            total_len = self.__weights["w_" + temp_index].get_shape().as_list()[-1]
 
-                        single_mask = self.__chanels_mask[i]
+                        if self.__get_op_type(i)=="add":
+                            total_len = self.__add_shape["add_"+temp_index]
+
+                            single_mask = [i for i in range(total_len)] # 全部保留
+                        else:
+                            if self.__get_op_type(i)=="dconv":
+                                total_len = self.__weights["w_" + temp_index+"_pts"].get_shape().as_list()[-1]
+                            else:
+                                total_len = self.__weights["w_" + temp_index].get_shape().as_list()[-1]
+
+                            single_mask = self.__chanels_mask[i]
+
                         _single_mask = np.array(single_mask) + cnt
                         real_mask += list(_single_mask)
 
@@ -464,6 +548,25 @@ class Pruner():
                     real_mask = np.array(real_mask)
                     np_weight_dep = np_weight_dep[:, :, real_mask, :]
                     np_weight_pts = np_weight_pts[:, :, real_mask, :]
+
+            son_list = self.__get_son(self.__index_remap[sl])
+
+            # if currnet node is the last node
+            if len(son_list)==0:
+                return_weights_dict = {"w_" + op_index + "_dep": np_weight_dep,
+                                       "w_" + op_index + "_pts": np_weight_pts,
+                                       "b_" + op_index: np_bias}
+                return return_weights_dict, np_weight_pts.shape
+
+            for s_n in son_list:
+                if self.__get_op_type(s_n)=="add":
+                    return_weights_dict = {"w_" + op_index + "_dep": np_weight_dep,
+                                           "w_" + op_index + "_pts": np_weight_pts,
+                                           "b_" + op_index: np_bias}
+                    prune_channel_index = [i for i in range(np_weight_pts.shape[-1])]
+                    self.__chanels_mask.update(
+                        {self.__index_remap[sl]: prune_channel_index})  # save the channels mask
+                    return return_weights_dict,np_weight.shape
 
             conv_sum = np.sum(np_weight_pts,(0,1,2))
             abs_conv_sum = np.abs(conv_sum)

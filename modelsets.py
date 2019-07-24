@@ -1,13 +1,18 @@
 #coding:utf-8
-#author:Wang Haibo
-#at: Pingan Tec.
+
+'''
+author:Wang Haibo
+at: Pingan Tec.
+email: haibo.david@qq.com
+
+!!!
+代码中会有少量中文注释，无需在意
+
+'''
 
 from pruner import Pruner
-# from pruner_new import Pruner
-import pickle as pkl
-import numpy as np
-import os
-import tensorflow as tf
+
+__all__ = ["CifarModelZoo"]
 
 class CifarModelZoo():
 
@@ -17,7 +22,7 @@ class CifarModelZoo():
         self.model_config = {"resnet18":[2,2,2,2],"resnet34":[3,4,6,3],"resnet50":[3,4,6,3]}
         self.init_channels = 64
         self.block_version = 2
-        self.support_model = ["simpleNet","DenseNet40","MobileNetV1","vgg19"]
+        self.support_model = ["simpleNet","DenseNet40","MobileNetV1","vgg19","resnet18","resnet34"]
         # end
 
     @classmethod
@@ -44,6 +49,12 @@ class CifarModelZoo():
         elif model_name=="vgg19":
             return_func = cls().vgg19
 
+        elif model_name=="resnet18":
+            return_func = cls().ResNet18
+
+        elif model_name=="resnet34":
+            return_func = cls().ResNet34
+
         return return_func(inputs=params["inputs"],
                            is_train=params["is_train"],
                            reload_w=params["reload_w"],
@@ -56,16 +67,19 @@ class CifarModelZoo():
         k_size = 5
         x = model._add_layer(inputs, mode='conv', out_c=32, k_size=k_size, strides=1, is_train=is_train)
         x = model._add_layer(x, mode='conv', out_c=64, k_size=k_size, strides=2, is_train=is_train)
+        x1 = model._add_layer(x, mode='conv', out_c=64, k_size=k_size, strides=1, is_train=is_train)
+        x2 = model._add_layer(x, mode='conv', out_c=64, k_size=k_size, strides=1, is_train=is_train)
+
+        x = model.Add_layer(x1,x2)
 
         x = model._add_layer(x, mode='conv', out_c=64, k_size=k_size, strides=1, is_train=is_train)
-        x = model._add_layer(x, mode='conv', out_c=128, k_size=k_size, strides=2, is_train=is_train)
+        x = model._add_layer(x, mode='conv', out_c=96, k_size=k_size, strides=2, is_train=is_train)
 
-        x = model._add_layer(x, mode='conv', out_c=128, k_size=k_size, strides=1, is_train=is_train)
-        x = model._add_layer(x, mode='conv', out_c=256, k_size=k_size, strides=2, is_train=is_train)
+        x = model._add_layer(x, mode='conv', out_c=96, k_size=k_size, strides=1, is_train=is_train)
+        x = model._add_layer(x, mode='conv', out_c=128, k_size=k_size, strides=2, is_train=is_train)
 
         x = model.gap_layer(x)
 
-        x = model._add_layer(x, mode="fc", out_c=512, with_bn=False)
         x = model._add_layer(x, mode="fc", out_c=num_classes, with_bn=False, act=None)
 
         return x,model
@@ -147,7 +161,6 @@ class CifarModelZoo():
 
         return x,model
 
-    @classmethod
     def ResNet18(self,inputs=None,is_train=True,reload_w=None,num_classes=None):
 
         model = Pruner(reload_file=reload_w)
